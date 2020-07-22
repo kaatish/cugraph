@@ -51,8 +51,7 @@ def test_dask_pagerank():
 
     print("Start call")
     expected_pr = cugraph.pagerank(g)
-    result_pr = dcg.pagerank(dg)
-    print("End call")
+    result_pr = dcg.pagerank(dg, tol=1e-6)
 
     err = 0
     tol = 1.0e-05
