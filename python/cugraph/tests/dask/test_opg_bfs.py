@@ -27,7 +27,10 @@ def test_dask_pagerank():
     client = Client(cluster)
     Comms.initialize()
 
-    input_data_path = r"../datasets/karate.csv"
+    #input_data_path = r"../datasets/karate.csv"
+    #input_data_path = r"/home/aatish/workspace/cugraph/datasets/netscience.csv"
+    #input_data_path = r"/home/aatish/workspace/cugraph/datasets/netscience.csv"
+    input_data_path = r"/home/aatish/workspace/datasets/GAP-road.csv"
     chunksize = dcg.get_chunksize(input_data_path)
 
     ddf = dask_cudf.read_csv(input_data_path, chunksize=chunksize,
@@ -58,6 +61,10 @@ def test_dask_pagerank():
     for i in range(len(result_dist)):
         if(result_dist['distance'].iloc[i] != expected_dist['distance'].iloc[i]):
             err = err + 1
+            res = str(result_dist['distance'].iloc[i])
+            gold = str(expected_dist['distance'].iloc[i])
+            res_pred = str(result_dist['predecessor'].iloc[i])
+            print(str(i) + ' ' + res + ' ' + gold + ' ' + res_pred)
     assert err == 0
 
     Comms.destroy()
