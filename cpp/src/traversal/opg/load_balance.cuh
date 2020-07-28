@@ -113,13 +113,17 @@ class LoadBalanceExecution {
       rmm::device_vector<VT> &input_frontier,
       rmm::device_vector<VT> &output_frontier)
   {
+    output_frontier.resize(graph_.number_of_vertices);
     output_vertex_count_[0] = 0;
     cudaStream_t stream = handle_.get_stream();
     dist_.setup(graph_.offsets, nullptr, vertex_begin_, vertex_end_);
     auto distribution = dist_.run(
         input_frontier, reorganized_vertices_, stream);
 
-    //DegreeBucket<VT, ET> large_bucket = distribution.degreeRange(16);
+    DegreeBucket<VT, ET> large_bucket = distribution.degreeRange(16);
+    if (large_bucket.numberOfVertices != 0) {
+      std::cerr<<"large_vertex_worker\n";
+    }
     // TODO : Use other streams from handle_
     //TODO : Disabled for testing
     //large_vertex_worker(graph_, large_bucket, op, stream);

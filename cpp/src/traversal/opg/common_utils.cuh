@@ -101,6 +101,7 @@ struct bfs_bmap_frontier_pred {
 
   __device__ void operator()(VT src, VT dst)
   {
+    //printf("E : %d %d\n", (int)src, (int)dst);
     unsigned active_bit = static_cast<unsigned>(1) << (dst % BitsPWrd<unsigned>);
     unsigned prev_word  = atomicOr(output_frontier_ + (dst / BitsPWrd<unsigned>), active_bit);
     bool dst_not_visited_earlier = !(active_bit & visited_[dst / BitsPWrd<unsigned>]);
@@ -129,7 +130,7 @@ struct bfs_pred {
 
   __device__ void operator()(VT src, VT dst, VT * frontier, ET * frontier_count)
   {
-    printf("e : %d %d\n", (int)src, (int)dst);
+    //printf("e : %d %d\n", (int)src, (int)dst);
     unsigned active_bit = static_cast<unsigned>(1) << (dst % BitsPWrd<unsigned>);
     unsigned prev_word  = atomicOr(output_frontier_ + (dst / BitsPWrd<unsigned>), active_bit);
     bool dst_not_visited_earlier = !(active_bit & visited_[dst / BitsPWrd<unsigned>]);
@@ -169,7 +170,7 @@ struct bfs_pred_dist {
 
   __device__ void operator()(VT src, VT dst, VT * frontier, ET * frontier_count)
   {
-    printf("e : %d %d\n", (int)src, (int)dst);
+    //printf("e : %d %d\n", (int)src, (int)dst);
     unsigned active_bit = static_cast<unsigned>(1) << (dst % BitsPWrd<unsigned>);
     unsigned prev_word  = atomicOr(output_frontier_ + (dst / BitsPWrd<unsigned>), active_bit);
     bool dst_not_visited_earlier = !(active_bit & visited_[dst / BitsPWrd<unsigned>]);
@@ -208,6 +209,7 @@ struct bfs_bmap_frontier_pred_dist {
 
   __device__ void operator()(VT src, VT dst)
   {
+    //printf("E : %d %d\n", (int)src, (int)dst);
     unsigned active_bit = static_cast<unsigned>(1) << (dst % BitsPWrd<unsigned>);
     unsigned prev_word  = atomicOr(output_frontier_ + (dst / BitsPWrd<unsigned>), active_bit);
     bool dst_not_visited_earlier = !(active_bit & visited_[dst / BitsPWrd<unsigned>]);

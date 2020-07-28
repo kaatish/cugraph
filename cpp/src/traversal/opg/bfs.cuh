@@ -25,6 +25,24 @@
 #include <thrust/scan.h>
 #include <utilities/high_res_timer.hpp>
 
+namespace debug {
+
+template <typename T>
+void print(rmm::device_vector<T>& data,
+    std::string prefix_label = "",
+    std::string delim = " ") {
+  std::string out = prefix_label;
+  for (size_t i = 0; i < data.size(); ++i) {
+    T val = data[i];
+    out += std::to_string(val) + delim;
+  }
+  out += "\n";
+  std::cout<<out;
+}
+
+
+}
+
 namespace cugraph {
 
 namespace opg {
@@ -219,6 +237,7 @@ void bfs(raft::handle_t const &handle,
   HighResTimer main_loop_timer;
   HighResTimer step_timer;
 
+  step_timer.start("Create Isolated bmap");
   //Reusing buffers to create isolated bitmap
   {
     rmm::device_vector<vertex_t>& local_isolated_ids = input_frontier;
@@ -228,6 +247,7 @@ void bfs(raft::handle_t const &handle,
         local_isolated_ids, global_isolated_ids,
         temp_buffer_len, isolated_bmap);
   }
+  step_timer.stop();
 
   cudaStream_t stream = handle.get_stream();
 
@@ -235,6 +255,7 @@ void bfs(raft::handle_t const &handle,
   input_frontier.resize(1);
   input_frontier[0] = start_vertex;
 
+  step_timer.start("Fill Distances");
   //Start at level 0
   vertex_t level = 0;
   if (distances != nullptr) {
@@ -252,6 +273,7 @@ void bfs(raft::handle_t const &handle,
                predecessors,
                predecessors + graph.number_of_vertices,
                graph.number_of_vertices);
+  step_timer.stop();
 
   do {
     main_loop_timer.start("main_loop");
@@ -268,14 +290,22 @@ void bfs(raft::handle_t const &handle,
                  static_cast<unsigned>(0));
     step_timer.stop();
 
-    step_timer.start("lb.run 3");
+    ++level;
+#if 0
+//std::string meta = std::to_string(handle.get_comms().get_rank()) + "." +
+//  std::to_string(level);
+//auto dummy_in = input_frontier;
+//auto dummy_out = output_frontier;
+//auto dummy_output_bmap = output_frontier_bmap;
+//debug::print(input_frontier, meta + ". input_frontier : ");
+    step_timer.start("old lb");
     //Generate output frontier bitmap from input frontier
     if (distances != nullptr) {
       // BFS Functor for frontier calculation
       detail::bfs_bmap_frontier_pred_dist<vertex_t> bfs_op(
         output_frontier_bmap.data().get(),
         visited_bmap.data().get(),
-        predecessors, distances, ++level);
+        predecessors, distances, level);
       lb.run(bfs_op, input_frontier);
     } else {
       // BFS Functor for frontier calculation
@@ -286,6 +316,7 @@ void bfs(raft::handle_t const &handle,
       lb.run(bfs_op, input_frontier);
     }
     step_timer.stop();
+
     step_timer.start("bitmap_to_frontier 4");
     detail::bitmap_to_frontier(
         handle, graph,
@@ -294,6 +325,37 @@ void bfs(raft::handle_t const &handle,
         visited_bmap,
         output_frontier);
     step_timer.stop();
+
+#endif
+//debug::print(output_frontier, meta + ". output_frontier : ");
+//    step_timer.stop();
+
+#if 1
+    step_timer.start("new lb");
+    //Generate output frontier bitmap from input frontier
+    if (distances != nullptr) {
+      // BFS Functor for frontier calculation
+      //debug::print(dummy_in, meta + ". dummy_in : ");
+      detail::bfs_pred_dist<vertex_t, edge_t> bfs_op(
+        output_frontier_bmap.data().get(),
+        isolated_bmap.data().get(),
+        visited_bmap.data().get(),
+        predecessors, distances, level);
+      lb.run(bfs_op, input_frontier, output_frontier);
+      //debug::print(dummy_out, meta + ". dummy_out : ");
+    } else {
+      // BFS Functor for frontier calculation
+      //debug::print(dummy_in, meta + ". dummy_in : ");
+      detail::bfs_pred<vertex_t, edge_t> bfs_op(
+        output_frontier_bmap.data().get(),
+        isolated_bmap.data().get(),
+        visited_bmap.data().get(),
+        predecessors);
+      lb.run(bfs_op, input_frontier, output_frontier);
+      //debug::print(dummy_out, meta + ". dummy_out : ");
+    }
+    step_timer.stop();
+#endif
 
     step_timer.start("collect");
     //Use input_frontier buffer to collect output_frontier
@@ -313,8 +375,7 @@ void bfs(raft::handle_t const &handle,
     main_loop_timer.stop();
   } while (input_frontier.size() != 0);
 
-  main_loop_timer.display(std::cout);
-  step_timer.display(std::cout);
+  step_timer.start("All reduce predecessors");
   // In place reduce to collect predecessors
   if (handle.comms_initialized()) {
     handle.get_comms().allreduce(predecessors,
@@ -323,7 +384,9 @@ void bfs(raft::handle_t const &handle,
                                  raft::comms::op_t::MIN,
                                  handle.get_stream());
   }
+  step_timer.stop();
 
+  step_timer.start("Replace");
   // If the bfs loop does not assign a predecessor for a vertex
   // then its value will be graph.number_of_vertices. This needs to be
   // replaced by invalid vertex id to denote that a vertex does have
@@ -333,7 +396,9 @@ void bfs(raft::handle_t const &handle,
                   predecessors + graph.number_of_vertices,
                   graph.number_of_vertices,
                   cugraph::invalid_vertex_id<vertex_t>::value);
+  step_timer.stop();
 
+  step_timer.start("All reduce distances");
   if (distances != nullptr) {
     // In place reduce to collect predecessors
     if (handle.comms_initialized()) {
@@ -344,7 +409,10 @@ void bfs(raft::handle_t const &handle,
                                    handle.get_stream());
     }
   }
+  step_timer.stop();
 
+  main_loop_timer.display(std::cout);
+  step_timer.display(std::cout);
 }
 
 #else

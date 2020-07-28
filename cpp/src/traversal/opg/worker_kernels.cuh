@@ -48,38 +48,38 @@ __global__ void kernel_per_vertex_worker_weightless(cugraph::GraphCSRView<VT, ET
   }
 }
 
-//template <typename VT, typename ET, typename WT, typename Operator>
-//__global__ void kernel_per_vertex_worker_weightless(cugraph::GraphCSRView<VT, ET, WT> graph,
-//                                                    VT *vertex_ids,
-//                                                    VT number_of_vertices,
-//                                                    VT *output_vertex_ids,
-//                                                    Operator op)
-//{
-//  VT current_vertex_index = 0;
-//  ET tid                  = threadIdx.x + (blockIdx.x * blockDim.x);
-//  ET stride               = blockDim.x * gridDim.x;
-//  VT output_frontier[REP];
-//  ET output_frontier_count;
-//
-//  while (current_vertex_index < number_of_vertices) {
-//    VT source       = vertex_ids[current_vertex_index];
-//    ET offset_begin = graph.offsets[source];
-//    ET offset_end   = graph.offsets[source + 1];
-//    ET num_iter_this_vertex = (offset_end - offset_begin + stride - 1)/stride;
-//    ET edge_index = tid + offset_begin;
-//
-//    for (ET iter = 0; iter < num_iter_this_vertex; ++iter) {
-//      if (edge_index < offset_end) {
-//        op(source, graph.indices[edge_index], output_frontier, &output_frontier_count);
-//      }
-//      edge_index += stride;
-//    }
-//    //for (ET edge_index = tid + offset_begin; edge_index < offset_end; edge_index += stride) {
-//    //  op(source, graph.indices[edge_index], output_frontier, &output_frontier_count);
-//    //}
-//    current_vertex_index++;
-//  }
-//}
+///template <typename VT, typename ET, typename WT, typename Operator>
+///__global__ void kernel_per_vertex_worker_weightless(cugraph::GraphCSRView<VT, ET, WT> graph,
+///                                                    VT *vertex_ids,
+///                                                    VT number_of_vertices,
+///                                                    VT *output_vertex_ids,
+///                                                    ET *output_vertex_ids_offset,
+///                                                    Operator op)
+///{
+///  VT current_vertex_index = 0;
+///  ET tid                  = threadIdx.x + (blockIdx.x * blockDim.x);
+///  ET stride               = blockDim.x * gridDim.x;
+///
+///  //TODO : Increase REP
+///  const int REP = 4;
+///  VT local_frontier[REP];
+///  ET local_frontier_count = 0;
+///  ET local_frontier_offset = 0;
+///  ET local_frontier_offset_total = 0;
+///  __shared__ ET block_write_index;
+///
+///  while (current_vertex_index < number_of_vertices) {
+///    VT source       = vertex_ids[current_vertex_index];
+///    ET offset_begin = graph.offsets[source];
+///    ET offset_end   = graph.offsets[source + 1];
+///    ET num_iter_this_vertex = (offset_end - offset_begin + blockDim.x - 1)/blockDim.x;
+///
+///    for (ET edge_index = tid + offset_begin; edge_index < offset_end; edge_index += stride) {
+///      op(source, graph.indices[edge_index]);
+///    }
+///    current_vertex_index++;
+///  }
+///}
 
 template <typename VT, typename ET, typename WT, typename Operator>
 void large_vertex_worker(cugraph::GraphCSRView<VT, ET, WT> const &graph,
@@ -90,6 +90,7 @@ void large_vertex_worker(cugraph::GraphCSRView<VT, ET, WT> const &graph,
   int block_size  = 32;
   int block_count = bucket.numberOfVertices * (1 << (bucket.ceilLogDegreeStart - 5));
   if (bucket.numberOfVertices != 0) {
+  std::cerr<<"large_vertex_worker\n";
     kernel_per_vertex_worker_weightless<<<block_count, block_size, 0, stream>>>(
       graph, bucket.vertexIds, bucket.numberOfVertices, op);
   }
@@ -119,6 +120,7 @@ __global__ void block_per_vertex_worker_weightless(cugraph::GraphCSRView<VT, ET,
                                                    ET *output_vertex_ids_offset,
                                                    Operator op)
 {
+  //TODO : Increase REP
   const int REP = 4;
   VT local_frontier[REP];
   ET local_frontier_count = 0;
@@ -144,12 +146,11 @@ __global__ void block_per_vertex_worker_weightless(cugraph::GraphCSRView<VT, ET,
       local_frontier_count = 0;
     }
     if (iter % REP == 0) {
+      local_frontier_offset_total = 0;
       BlockScan(temp_storage).ExclusiveSum(
           local_frontier_count,
           local_frontier_offset,
           local_frontier_offset_total);
-      printf("local_frontier_count %d local_frontier_offset_total %d\n",
-          (int)local_frontier_count, (int)local_frontier_offset_total);
       if (local_frontier_offset_total != 0) {
         if (threadIdx.x == 0) {
           block_write_index = cugraph::detail::traversal::atomicAdd(
@@ -186,12 +187,6 @@ __global__ void block_per_vertex_worker_weightless(cugraph::GraphCSRView<VT, ET,
     local_frontier_offset = 0;
     local_frontier_offset_total = 0;
   }
-  //for (ET edge_index = threadIdx.x + graph.offsets[source]; edge_index < graph.offsets[source + 1];
-  //     edge_index += blockDim.x) {
-  //  op(source, graph.indices[edge_index], local_frontier, &local_frontier_count);
-  //  if (iter % REP == 0) {
-  //  }
-  //}
 }
 
 template <typename VT, typename ET, typename WT, typename Operator>

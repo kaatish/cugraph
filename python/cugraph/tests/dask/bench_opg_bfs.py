@@ -23,8 +23,8 @@ def test_dask_pagerank():
     t1 = time.time()
     Comms.initialize()
     t2 = time.time()
-    #input_data_path = r"/home/aatish/workspace/datasets/GAP-road.csv"
-    input_data_path = r"/home/aatish/workspace/cugraph/datasets/karate.csv"
+    input_data_path = r"/home/aatish/workspace/datasets/GAP-road.csv"
+    #input_data_path = r"/home/aatish/workspace/cugraph/datasets/karate.csv"
     chunksize = dcg.get_chunksize(input_data_path)
     ddf = dask_cudf.read_csv(input_data_path, chunksize=chunksize,
                              delimiter=' ',
@@ -47,9 +47,11 @@ def test_dask_pagerank():
     #Pre compute local data
     dg.compute_local_data(by='src')
     t4 = time.time()
-    result_dist = dcg.bfs(dg, 33, True)
+    print("Call MG bfs")
+    result_dist = dcg.bfs(dg, 0, True)
     t5 = time.time()
-    expected_dist = cugraph.bfs(g, 33)
+    print("Call SG bfs")
+    expected_dist = cugraph.bfs(g, 0)
     t6 = time.time()
     print("---------- Comms Intialization Time: ", t2-t1, "s ----------")
     print("---------- read_csv + compute_local_data Time: ", t4-t3, "s ----------")
